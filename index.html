@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Annotation Tool</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
+    .note-buttons { margin-left: 10px; }
+    #waveform { margin-top: 20px; }
+    #noteInput {
+      width: 50%;
+      min-height: 24px;
+      max-height: 200px;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      outline: none;
+      border-radius: 4px;
+      overflow-y: auto;
+    }
+    #emojiInput {
+      font-size: 18px;
+      margin-top: 10px;
+    }
+    #timeDisplay {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #555;
+    }
+    #zoomControls {
+      margin-top: 10px;
+    }
+    #zoomControls button {
+      font-size: 14px;
+      margin-right: 5px;
+    }
+  </style>
+  <script src="https://unpkg.com/wavesurfer.js"></script>
+</head>
+<body>
+  <h1>Audio Annotation Tool</h1>
+
+  <input type="file" id="audioFile" accept="audio/*" />
+  <br><br>
+  <div id="waveform"></div>
+  <div id="timeDisplay">Current: 00:00:00 / Total: 00:00:00</div>
+  <div id="zoomControls">
+    <button onclick="zoomIn()">Zoom In</button>
+    <button onclick="zoomOut()">Zoom Out</button>
+  </div>
+  <br>
+  <div contenteditable="true" id="noteInput" placeholder="Enter note here..."></div>
+  <br>
+  <label for="emojiInput">Category:</label>
+  <select id="emojiInput">
+    <option value="">—</option>
+    <option value="🎵">🎵 Music</option>
+    <option value="📝">📝 Note</option>
+    <option value="❗">❗ Important</option>
+    <option value="💡">💡 Cue</option>
+  </select>
+  <button onclick="addNote()">Add Note</button>
+
+  <table id="notesContainer">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Time</th>
+        <th>Note</th>
+        <th>Type</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const notes = [];
+    let wavesurfer;
+    let timeInterval;
+    let currentZoom = 100;
+
+    document.getElementById('audioFile').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (file) {
+        if (wavesurfer) {
+          wavesurfer.destroy();
+          clearInterval(timeInterval);
+        }
+
+        wavesurfer = WaveSurfer.create({
+          interact: true,
+          cursorColor: '#333',
+          container: '#waveform',
+          waveColor: '#ccc',
+          progressColor: '#555',
+          height: 100,
+          responsive: true,
+          normalize: true,
+          barWidth: 2,
+          barGap: null,
+          partialRender: true
+        });
+
+        wavesurfer.on('ready', () => {
+          updateTimeDisplay();
+          timeInterval = setInterval(updateTimeDisplay, 200);
+        });
+
+        const objectURL = URL.createObjectURL(file);
+        wavesurfer.load(objectURL);
+      }
+    });
+
+    function zoomIn() {
+      currentZoom *= 1.2;
+      if (wavesurfer) wavesurfer.zoom(currentZoom);
+    }
+
+    function zoomOut() {
+      currentZoom /= 1.2;
+      if (wavesurfer) wavesurfer.zoom(currentZoom);
+    }
+
+    document.getElementById('noteInput').addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        addNote();
+      }
+    });
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === ' ' && event.target.id !== 'noteInput') {
+        event.preventDefault();
+        if (wavesurfer) {
+          wavesurfer.isPlaying() ? wavesurfer.pause() : wavesurfer.play();
+        }
+      }
+    });
+
+    function formatTime(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      return [h, m, s]
+        .map(unit => String(unit).padStart(2, '0'))
+        .join(':');
+    }
+
+    function updateTimeDisplay() {
+      if (!wavesurfer) return;
+      const current = formatTime(wavesurfer.getCurrentTime());
+      const total = formatTime(wavesurfer.getDuration());
+      document.getElementById('timeDisplay').textContent = `Current: ${current} / Total: ${total}`;
+    }
+
+    function parseTime(timeString) {
+      const [h, m, s] = timeString.split(':').map(Number);
+      return h * 3600 + m * 60 + s;
+    }
+
+    function renderNotes() {
+      const tbody = document.querySelector('#notesContainer tbody');
+      tbody.innerHTML = '';
+
+      notes
+        .sort((a, b) => parseTime(a.time) - parseTime(b.time))
+        .forEach((entry, index) => {
+          const row = document.createElement('tr');
+
+          const indexCell = document.createElement('td');
+          indexCell.textContent = index + 1;
+
+          const timeCell = document.createElement('td');
+          timeCell.textContent = entry.time;
+          timeCell.style.cursor = 'pointer';
+          timeCell.onclick = function () {
+            const jumpTime = parseTime(entry.time);
+            if (wavesurfer) wavesurfer.seekTo(jumpTime / wavesurfer.getDuration());
+          };
+
+          const noteCell = document.createElement('td');
+          const editableDiv = document.createElement('div');
+          editableDiv.contentEditable = true;
+          editableDiv.innerHTML = entry.note;
+          editableDiv.onblur = function () {
+            notes[index].note = editableDiv.innerHTML.trim();
+          };
+          noteCell.appendChild(editableDiv);
+
+          const typeCell = document.createElement('td');
+          typeCell.textContent = entry.emoji || '';
+
+          const actionCell = document.createElement('td');
+          const deleteBtn = document.createElement('button');
+          deleteBtn.textContent = 'Delete';
+          deleteBtn.onclick = function () {
+            notes.splice(index, 1);
+            renderNotes();
+          };
+          actionCell.appendChild(deleteBtn);
+
+          row.appendChild(indexCell);
+          row.appendChild(timeCell);
+          row.appendChild(noteCell);
+          row.appendChild(typeCell);
+          row.appendChild(actionCell);
+
+          tbody.appendChild(row);
+        });
+    }
+
+    function addNote() {
+      if (!wavesurfer) return;
+      const noteInput = document.getElementById('noteInput');
+      const emojiInput = document.getElementById('emojiInput');
+      const rawTime = wavesurfer.getCurrentTime();
+      const time = formatTime(rawTime);
+      const note = noteInput.innerHTML.trim();
+      const emoji = emojiInput.value;
+      if (!note) return;
+
+      const entry = { time, note, emoji };
+      notes.push(entry);
+      renderNotes();
+      noteInput.innerHTML = '';
+      emojiInput.value = '';
+    }
+  </script>
+</body>
+</html>

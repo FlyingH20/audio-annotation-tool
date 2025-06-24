@@ -40,7 +40,7 @@
     }
   </style>
   <script src="https://unpkg.com/wavesurfer.js"></script>
-  <script src="https://unpkg.com/wavesurfer.js/dist/plugins/wavesurfer.markers.min.js"></script>
+  <script src="https://unpkg.com/wavesurfer.js/dist/plugin/wavesurfer.markers.min.js"></script>
 </head>
 <body>
   <h1>Audio Annotation Tool</h1>
@@ -229,7 +229,6 @@
       const entry = { time, note, emoji };
       notes.push(entry);
 
-      // Add marker to waveform
       if (markerPlugin) {
         markerPlugin.add({ time: rawTime, label: String(notes.length), color: '#ff5500' });
       }

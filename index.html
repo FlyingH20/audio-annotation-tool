@@ -36,11 +36,31 @@
             }
         }
         /* Style for the contenteditable div */
-        #annotation-input[contenteditable="true"] {
+        #annotation-input[contenteditable="true"], .editable-note {
             -webkit-appearance: none;
             -moz-appearance: none;
             appearance: none;
             outline: none;
+        }
+        /* Style for inline select */
+        .editable-emoji {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-color: transparent;
+            border: 1px solid transparent;
+            padding: 0.25rem;
+            width: 100%;
+            cursor: pointer;
+        }
+        .editable-emoji:hover {
+            border-color: #d1d5db; /* gray-300 */
+        }
+        .editable-emoji:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            --tw-ring-color: #6366f1; /* indigo-500 */
+            box-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
         }
     </style>
 </head>
@@ -81,12 +101,21 @@
             <div id="annotation-section" class="hidden mt-8">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-semibold">Annotations</h2>
-                    <button id="download-csv-btn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition text-sm flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
-                        </svg>
-                        Download CSV
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="import-csv-btn" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition text-sm flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            Import CSV
+                        </button>
+                        <input type="file" id="import-csv-input" class="hidden" accept=".csv,text/csv">
+                        <button id="download-csv-btn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition text-sm flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Download CSV
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Annotation Input Form -->
@@ -156,6 +185,8 @@
         const infoBox = document.getElementById('info-box');
         const currentFileEl = document.getElementById('current-file');
         const downloadCsvBtn = document.getElementById('download-csv-btn');
+        const importCsvBtn = document.getElementById('import-csv-btn');
+        const importCsvInput = document.getElementById('import-csv-input');
 
         let wavesurfer;
         let annotations = [];
@@ -164,71 +195,37 @@
 
         // --- Utility Functions ---
         const formatTime = (seconds) => {
+            if (isNaN(seconds)) return '00:00:00';
             const h = Math.floor(seconds / 3600);
             const m = Math.floor((seconds % 3600) / 60);
             const s = Math.floor(seconds % 60);
             return [h, m, s].map(unit => String(unit).padStart(2, '0')).join(':');
         };
 
-        const parseTime = (timeString) => {
-            const [h, m, s] = timeString.split(':').map(Number);
-            return h * 3600 + m * 60 + s;
-        };
-
         // --- WaveSurfer Initialization ---
         const initWaveSurfer = () => {
-            if (wavesurfer) {
-                wavesurfer.destroy();
+            try {
+                if (wavesurfer) {
+                    wavesurfer.destroy();
+                }
+                wavesurfer = WaveSurfer.create({
+                    container: waveformContainer,
+                    waveColor: '#a8b5c1',
+                    progressColor: '#6366f1',
+                    barWidth: 2,
+                    barGap: 1,
+                    normalize: true,
+                    height: 128,
+                    responsive: true,
+                });
+                bindWaveSurferEvents();
+            } catch (error) {
+                console.error("Error initializing WaveSurfer:", error);
+                dropZoneText.textContent = '❌ Could not initialize audio player.';
+                dropZone.classList.add('border-red-500');
             }
-            // Create a new WaveSurfer instance
-            wavesurfer = WaveSurfer.create({
-                container: waveformContainer,
-                waveColor: '#a8b5c1',
-                progressColor: '#6366f1',
-                barWidth: 2,
-                barGap: 1,
-                normalize: true,
-                height: 128,
-                responsive: true,
-            });
-
-            // --- WaveSurfer Event Listeners ---
-            wavesurfer.on('ready', () => {
-                isReady = true;
-                totalTimeEl.textContent = formatTime(wavesurfer.getDuration());
-                playPauseBtn.disabled = false;
-                playPauseBtn.textContent = 'Play';
-                dropZone.classList.add('border-green-500');
-                dropZoneText.textContent = '✅ Success! File loaded.';
-                playerControls.classList.remove('hidden');
-                annotationSection.classList.remove('hidden');
-                infoBox.classList.add('hidden');
-                zoomSlider.value = zoomSlider.min;
-                wavesurfer.zoom(Number(zoomSlider.value)); // Apply initial zoom
-            });
-
-            wavesurfer.on('audioprocess', () => {
-                currentTimeEl.textContent = formatTime(wavesurfer.getCurrentTime());
-            });
-            
-             wavesurfer.on('seeking', () => {
-                currentTimeEl.textContent = formatTime(wavesurfer.getCurrentTime());
-            });
-
-            wavesurfer.on('play', () => {
-                playPauseBtn.textContent = 'Pause';
-            });
-
-            wavesurfer.on('pause', () => {
-                playPauseBtn.textContent = 'Play';
-            });
-            
-            wavesurfer.on('loading', (percent) => {
-                dropZoneText.textContent = `🌀 Loading waveform... ${percent}%`;
-                dropZoneText.classList.add('animate-pulse-fast');
-            });
         };
-
+        
         // --- Annotation Logic ---
         const renderAnnotations = () => {
             annotationsTable.innerHTML = '';
@@ -245,7 +242,7 @@
 
             annotations.sort((a, b) => a.rawTime - b.rawTime);
 
-            annotations.forEach((ann, index) => {
+            annotations.forEach((ann) => {
                 const row = document.createElement('tr');
                 row.className = 'hover:bg-gray-50';
                 row.dataset.id = ann.id;
@@ -257,15 +254,30 @@
 
                 const emojiCell = document.createElement('td');
                 emojiCell.className = 'px-4 py-2 text-xl';
-                emojiCell.textContent = ann.emoji;
+                const emojiSelect = document.createElement('select');
+                emojiSelect.className = 'editable-emoji rounded-md';
+                emojiInput.querySelectorAll('option').forEach(opt => {
+                    emojiSelect.add(opt.cloneNode(true));
+                });
+                emojiSelect.value = ann.emoji;
+                emojiSelect.onchange = (e) => updateAnnotation(ann.id, { emoji: e.target.value });
+                emojiCell.appendChild(emojiSelect);
 
                 const noteCell = document.createElement('td');
                 noteCell.className = 'px-4 py-2';
                 const noteDiv = document.createElement('div');
                 noteDiv.contentEditable = true;
                 noteDiv.innerHTML = ann.note;
-                noteDiv.className = 'w-full bg-transparent focus:ring-1 focus:ring-indigo-500 focus:bg-white rounded p-1 outline-none';
+                noteDiv.className = 'editable-note w-full bg-transparent focus:ring-1 focus:ring-indigo-500 focus:bg-white rounded p-1';
                 noteDiv.onblur = (e) => updateAnnotation(ann.id, { note: e.target.innerHTML });
+                
+                noteDiv.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault(); // Prevent adding a new line
+                        e.target.blur();    // Trigger the onblur event to save
+                    }
+                });
+
                 noteCell.appendChild(noteDiv);
                 
                 const deleteCell = document.createElement('td');
@@ -311,7 +323,97 @@
             renderAnnotations();
         };
 
-        // --- CSV Download ---
+        // --- File Handling and Downloads ---
+        const handleAudioFile = (file) => {
+            if (!file || !file.type.startsWith('audio/')) {
+                dropZoneText.textContent = '⚠️ Please select a valid audio file';
+                dropZone.classList.add('border-red-500');
+                return;
+            }
+
+            try {
+                currentFileName = file.name.split('.').slice(0, -1).join('.') || 'annotations';
+                dropZoneText.textContent = `Loading file: ${file.name}`;
+                currentFileEl.textContent = `Current File: ${file.name}`;
+                dropZoneText.classList.remove('animate-pulse-fast');
+                initWaveSurfer();
+                wavesurfer.load(URL.createObjectURL(file));
+                annotations = [];
+                renderAnnotations();
+            } catch (error) {
+                console.error("Error loading audio file:", error);
+                dropZoneText.textContent = '❌ Error loading file. It may be corrupted.';
+                dropZone.classList.add('border-red-500');
+            }
+        };
+        
+        const handleCsvImport = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!isReady) {
+                alert("Please load an audio file before importing annotations.");
+                event.target.value = ''; // Reset file input
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                if (!text || text.trim() === '') {
+                    alert('The selected CSV file is empty.');
+                    return;
+                }
+                
+                try {
+                    const newAnnotations = [];
+                    const rows = text.split('\n');
+                    const header = rows[0].trim();
+                    
+                    // Basic header validation
+                    if (!header.includes("Time (s)") || !header.includes("Note")) {
+                        throw new Error("Invalid CSV format. Header is missing required columns.");
+                    }
+
+                    // Start from the second line (index 1)
+                    for(let i = 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        if (row.trim() === '') continue;
+
+                        const columns = row.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g).map(col => col.replace(/"/g, ''));
+                        
+                        if (columns.length < 4) {
+                            console.warn(`Skipping malformed row ${i + 1}: ${row}`);
+                            continue;
+                        }
+
+                        newAnnotations.push({
+                            id: Date.now() + i,
+                            rawTime: parseFloat(columns[0]),
+                            time: columns[1],
+                            emoji: columns[2],
+                            note: columns[3],
+                        });
+                    }
+                    
+                    if (newAnnotations.length === 0) {
+                        alert("No valid annotations found in the CSV file.");
+                        return;
+                    }
+
+                    annotations = newAnnotations;
+                    renderAnnotations();
+
+                } catch (parseError) {
+                    console.error("Error parsing CSV file:", parseError);
+                    alert(`Could not parse the CSV file. Please ensure it is correctly formatted. Error: ${parseError.message}`);
+                }
+            };
+            reader.readAsText(file);
+            
+            event.target.value = '';
+        };
+
         const downloadCSV = () => {
             if (annotations.length === 0) return;
             
@@ -320,27 +422,16 @@
                 const timeInS = ann.rawTime.toFixed(3);
                 const formattedTime = ann.time;
                 const emoji = ann.emoji;
-
-                // Create a temporary div to strip HTML from the note content
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = ann.note;
-                const noteText = (tempDiv.textContent || tempDiv.innerText || "").replace(/"/g, '""'); // Escape double quotes
-
-                // Enclose each field in double quotes to handle commas and other special characters
-                return [
-                    `"${timeInS}"`,
-                    `"${formattedTime}"`,
-                    `"${emoji}"`,
-                    `"${noteText}"`
-                ].join(',');
+                const noteText = (tempDiv.textContent || tempDiv.innerText || "").replace(/"/g, '""');
+                return [`"${timeInS}"`, `"${formattedTime}"`, `"${emoji}"`, `"${noteText}"`].join(',');
             });
 
-            // Start with the UTF-8 Byte Order Mark (BOM) to ensure Excel compatibility with emojis
             let csvContent = '\uFEFF'; 
             csvContent += headers.join(',') + '\r\n';
             csvContent += rows.join('\r\n');
 
-            // Use Blob for robust file creation
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             const url = URL.createObjectURL(blob);
@@ -352,64 +443,82 @@
             link.click();
             document.body.removeChild(link);
         };
-
-        // --- Event Listeners ---
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => e.target.files.length && handleFile(e.target.files[0]));
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('border-indigo-500', 'bg-indigo-50');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
-            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-        });
-
-        const handleFile = (file) => {
-            if (file && file.type.startsWith('audio/')) {
-                currentFileName = file.name.split('.').slice(0, -1).join('.') || 'annotations';
-                dropZoneText.textContent = `Loading file: ${file.name}`;
-                currentFileEl.textContent = `Current File: ${file.name}`;
-                dropZoneText.classList.remove('animate-pulse-fast');
-                initWaveSurfer();
-                wavesurfer.load(URL.createObjectURL(file));
-                annotations = [];
-                renderAnnotations();
-            } else {
-                dropZoneText.textContent = '⚠️ Please select an audio file';
+        
+        // --- Event Binding ---
+        const bindWaveSurferEvents = () => {
+            wavesurfer.on('ready', () => {
+                isReady = true;
+                totalTimeEl.textContent = formatTime(wavesurfer.getDuration());
+                playPauseBtn.disabled = false;
+                playPauseBtn.textContent = 'Play';
+                dropZone.classList.add('border-green-500');
+                dropZoneText.textContent = '✅ Success! File loaded.';
+                playerControls.classList.remove('hidden');
+                annotationSection.classList.remove('hidden');
+                infoBox.classList.add('hidden');
+                zoomSlider.value = zoomSlider.min;
+                wavesurfer.zoom(Number(zoomSlider.value));
+            });
+            wavesurfer.on('audioprocess', () => currentTimeEl.textContent = formatTime(wavesurfer.getCurrentTime()));
+            wavesurfer.on('seeking', () => currentTimeEl.textContent = formatTime(wavesurfer.getCurrentTime()));
+            wavesurfer.on('play', () => playPauseBtn.textContent = 'Play');
+            wavesurfer.on('pause', () => playPauseBtn.textContent = 'Play');
+            wavesurfer.on('loading', (percent) => {
+                dropZoneText.textContent = `🌀 Loading waveform... ${percent}%`;
+                dropZoneText.classList.add('animate-pulse-fast');
+            });
+            wavesurfer.on('error', (e) => {
+                console.error('WaveSurfer error:', e);
+                dropZoneText.textContent = `❌ Error decoding audio: ${e.message || e}`;
                 dropZone.classList.add('border-red-500');
-            }
+            });
         };
 
-        playPauseBtn.addEventListener('click', () => isReady && wavesurfer.playPause());
+        const bindEventListeners = () => {
+            // Renamed handleFile to handleAudioFile for clarity
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => e.target.files.length && handleAudioFile(e.target.files[0]));
 
-        zoomSlider.addEventListener('input', (e) => isReady && wavesurfer.zoom(Number(e.target.value)));
-
-        annotationInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                addAnnotation();
-            }
-        });
+                dropZone.classList.add('border-indigo-500', 'bg-indigo-50');
+            });
 
-        downloadCsvBtn.addEventListener('click', downloadCSV);
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-indigo-500', 'bg-indigo-50'));
 
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && document.activeElement !== annotationInput) {
+            dropZone.addEventListener('drop', (e) => {
                 e.preventDefault();
-                if (isReady) wavesurfer.playPause();
-            }
-        });
+                dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
+                if (e.dataTransfer.files.length) handleAudioFile(e.dataTransfer.files[0]);
+            });
+
+            playPauseBtn.addEventListener('click', () => isReady && wavesurfer.playPause());
+            zoomSlider.addEventListener('input', (e) => isReady && wavesurfer.zoom(Number(e.target.value)));
+            annotationInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    addAnnotation();
+                }
+            });
+
+            downloadCsvBtn.addEventListener('click', downloadCSV);
+            importCsvBtn.addEventListener('click', () => importCsvInput.click());
+            importCsvInput.addEventListener('change', handleCsvImport);
+
+            document.addEventListener('keydown', (e) => {
+                const activeEl = document.activeElement;
+                if (e.code === 'Space' && activeEl && !activeEl.isContentEditable && activeEl.tagName !== 'SELECT') {
+                    e.preventDefault();
+                    if (isReady) {
+                        wavesurfer.playPause();
+                    }
+                }
+            });
+        };
         
         // --- Initial Setup ---
         renderAnnotations();
+        bindEventListeners();
     </script>
 </body>
 </html>
